@@ -55,18 +55,27 @@
         var obj = JSON.parse(theDictText);
 
         // build dictionary: in the form of 2 array
-        var ipNameArray = [];
-        var realNameArray = [];
+        var name_dict = {};
+        var low_dict = {};
 
         for (let i = 0; i < obj.length; i++) {
             // add remove all white space and convert to lowercase
-            ipNameArray.push(Object.values(obj[i])[0]);
-            realNameArray.push(Object.values(obj[i])[1].toLowerCase().replace(/\s/g, ""));
+            var ipName = Object.values(obj[i])[0];
+            var realName = Object.values(obj[i])[1];
+            var realNameLow;
+            try {realNameLow = realName.toLowerCase().replace(/\s/g, "").replace(/-/g, "");}
+            catch(error) {
+                console.log(error + ", occurred at " + str(realName));
+                realNameLow = "Not_Applicable";
+            }
+            name_dict[realName] = ipName;
+            low_dict[realNameLow] = ipName;
         };
         
-        global_var.ipName = ipNameArray;
-        global_var.realName = realNameArray;
-        console.log("okay");
+        global_var.name_dict = name_dict;
+        global_var.low_dict = low_dict;
+        console.log("first part okay");
+        console.log(global_var);
     };
 </script>
 
@@ -90,9 +99,10 @@
             global_var.firstCol = arrayToCheck;
             // let resArray = [];
 
-            let result_ = returnResArray(arrayToCheck,global_var.realName,global_var.ipName);
+            let result_ = returnResArray(arrayToCheck,global_var.name_dict,global_var.low_dict);
 
             global_var.resArray = result_.a;
+            console.log("part 2 loading works")
             then_func(result_.s);
         };
 
@@ -107,18 +117,13 @@
         console.log(global_var);
         downloadToXlsx(global_var.firstCol,global_var.resArray);
         global_var.resStr = resStr;
-        console.log(resStr);
         b = document.getElementById("myBtn0");
         b.setAttribute("style", "display: block;");
         b.innerHTML = "copy the results";
-        a = document.createElement('div');
-        a.setAttribute('class', 'ml-5');
-        document.body.appendChild(a).innerHTML = "results downloaded<br><br>";
     };
 
     document.getElementById("myBtn0").addEventListener("click", function(){
         copyToClipboard(global_var.resStr);
-        alert("result copied");
     });
 </script>
 
@@ -132,19 +137,69 @@
         for(rowNum = range.s.r; rowNum <= range.e.r; rowNum++){
             var nextCell = sheet[XLSX.utils.encode_cell({r: rowNum, c: 0})];
             if( typeof nextCell === 'undefined' ){
+                // TODO: check if this part (typeof) has bug
                 firstCol.push("-----"); // originally push(void 0)
             } else firstCol.push(nextCell.w);
         };
+        console.log("extract first col worked");
         return firstCol;
     };
 
-    var returnResult = function(string, realArray, ipArray){
-        let loc = realArray.indexOf(string.toLowerCase().replace(/\s/g, ""));
-        if (loc !== -1){
-            return ipArray[loc];
-        } else return "-----";
+    var returnResult = function(string, name_dict, low_dict){
+        var res = name_dict[string];
+        if (res == null) {
+            try {
+                toLook = string.toLowerCase().replace(/\s/g, "").replace(/-/g, "");
+                res = low_dict[toLook];
+                if (res == null) res = "-----";
+            }
+            catch (error){
+                console.log(error);
+                res = "-----";
+            }
+        };
+        return res;
     };
-    
+
+    var returnResArray = function(arrayToCheck, nameD, lowD){
+        let resStr = "";
+        let resArray = [];
+
+        for (let i = 0; i < arrayToCheck.length; i++) {
+            thisRes = returnResult(arrayToCheck[i], nameD, lowD);
+            resStr = resStr.concat(thisRes.concat("\n"));
+            resArray.push(thisRes);
+        };
+
+        result_ = {"s": resStr, "a": resArray};
+        return result_;
+        console.log("return res array worked")
+    };
+
+    var downloadToXlsx = function(array0, array1){
+        // assume array 1 and array 2 are of same length
+        fetch("https://raw.githubusercontent.com/rogersICwest/excel_template/master/twoCol_dictionary_template.xlsx").then(r => r.arrayBuffer()).then(r => {
+            var currentdate = new Date();
+            var filename = (currentdate.getMonth()+1) + "-" + currentdate.getDate() + "_" + currentdate.getHours() + "." + currentdate.getMinutes() + '_lookup_results.xlsx'
+            var wb = XLSX.read(r, {type:"array"});
+            var ws = wb.Sheets[wb.SheetNames[0]];
+            // loop through each cell to write
+            for (let i = 0; i < array0.length; i++) {
+                let cell_ref0 = XLSX.utils.encode_cell({c:0, r:i});
+                let cell_ref1 = XLSX.utils.encode_cell({c:1, r:i});
+                // console.log(ws[cell_ref0].v);
+                // console.log(ws[cell_ref1].v);
+                ws[cell_ref0].v = array0[i];
+                ws[cell_ref1].v = array1[i];
+            };
+            XLSX.writeFile(wb, filename);
+        });
+        a = document.createElement('div');
+        a.setAttribute('class', 'ml-5');
+        document.body.appendChild(a).innerHTML = "results downloaded<br><br>";
+        console.log("download worked")
+    };
+
     var copyToClipboard = function(text){
         var dummy = document.createElement("textarea");
         // to avoid breaking original page when copying more words
@@ -156,40 +211,7 @@
         dummy.select();
         document.execCommand("copy");
         document.body.removeChild(dummy);
-        // alert("results successfully copied!")
-    };
-
-    var downloadToXlsx = function(array0, array1){
-        // assume array 1 and array 2 are of same length
-        fetch("https://raw.githubusercontent.com/rogersICwest/excel_template/master/twoCol_dictionary_template.xlsx").then(r => r.arrayBuffer()).then(r => {
-            var wb = XLSX.read(r, {type:"array"});
-            var ws = wb.Sheets[wb.SheetNames[0]];
-            console.log(ws);
-            // loop through each cell to write
-            for (let i = 0; i < array0.length; i++) {
-                let cell_ref0 = XLSX.utils.encode_cell({c:0, r:i});
-                let cell_ref1 = XLSX.utils.encode_cell({c:1, r:i});
-                // console.log(ws[cell_ref0].v);
-                // console.log(ws[cell_ref1].v);
-                ws[cell_ref0].v = array0[i];
-                ws[cell_ref1].v = array1[i];
-            };
-            XLSX.writeFile(wb, 'lookup_results.xlsx');
-        });
-    };
-
-    var returnResArray = function(arrayToCheck, rN, iN){
-        let resStr = "";
-        let resArray = [];
-
-        for (let i = 0; i < arrayToCheck.length; i++) {
-            thisRes = returnResult(arrayToCheck[i], rN, iN);
-            resStr = resStr.concat(thisRes.concat("\n"));
-            resArray.push(returnResult(arrayToCheck[i], rN, iN));
-        };
-
-        result_ = {"s": resStr, "a": resArray};
-        return result_;
+        alert("result copied");
     };
 </script>
 
